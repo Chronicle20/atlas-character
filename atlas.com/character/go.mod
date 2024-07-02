@@ -4,7 +4,7 @@ go 1.21.6
 
 require (
 	github.com/Chronicle20/atlas-model v0.0.0-20240702132802-b719b0ca5d96
-	github.com/Chronicle20/atlas-rest v0.0.0-20240613162124-15e10246a3d3
+	github.com/Chronicle20/atlas-rest v0.0.0-20240629173858-9967596e5b47
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/manyminds/api2go v0.0.0-20220325145637-95b4fb838cf6
