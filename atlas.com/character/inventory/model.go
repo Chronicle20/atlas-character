@@ -3,6 +3,7 @@ package inventory
 import (
 	"atlas-character/equipable"
 	"atlas-character/inventory/item"
+	"github.com/Chronicle20/atlas-model/model"
 )
 
 const (
@@ -91,8 +92,10 @@ type EquipableModel struct {
 	items    []equipable.Model
 }
 
-func NewEquipableModel() (EquipableModel, error) {
-	return EquipableModel{}, nil
+func NewEquipableModel(id uint32, capacity uint32) model.Provider[EquipableModel] {
+	return func() (EquipableModel, error) {
+		return EquipableModel{id: id, capacity: capacity}, nil
+	}
 }
 
 func (m EquipableModel) Id() uint32 {
@@ -128,8 +131,10 @@ type ItemModel struct {
 	items    []item.Model
 }
 
-func NewItemModel() (ItemModel, error) {
-	return ItemModel{}, nil
+func NewItemModel(id uint32, capacity uint32) model.Provider[ItemModel] {
+	return func() (ItemModel, error) {
+		return ItemModel{id: id, capacity: capacity}, nil
+	}
 }
 
 func (m ItemModel) Id() uint32 {

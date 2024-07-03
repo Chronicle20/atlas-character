@@ -32,13 +32,12 @@ func supplier() (Model, error) {
 	}, nil
 }
 
-func EquipableFolder(inventoryId uint32, capacity uint32) model.Folder[equipable.Model, EquipableModel] {
-	return func(m EquipableModel, em equipable.Model) (EquipableModel, error) {
-		m.id = inventoryId
-		m.capacity = capacity
-		m.items = append(m.items, em)
+func EquipableFolder(m EquipableModel, em equipable.Model) (EquipableModel, error) {
+	if em.Slot() <= 0 {
 		return m, nil
 	}
+	m.items = append(m.items, em)
+	return m, nil
 }
 
 func foldProperty[M any, N any](setter func(sm N) M) model.Transformer[N, M] {
@@ -47,39 +46,29 @@ func foldProperty[M any, N any](setter func(sm N) M) model.Transformer[N, M] {
 	}
 }
 
-func ItemFolder(inventoryId uint32, capacity uint32) model.Folder[item.Model, ItemModel] {
-	return func(m ItemModel, em item.Model) (ItemModel, error) {
-		m.id = inventoryId
-		m.capacity = capacity
-		m.items = append(m.items, em)
-		return m, nil
-	}
+func ItemFolder(m ItemModel, em item.Model) (ItemModel, error) {
+	m.items = append(m.items, em)
+	return m, nil
 }
 
 func foldInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(ref Model, ent entity) (Model, error) {
 	return func(ref Model, ent entity) (Model, error) {
-		var setter func(ItemModel) Model
-
 		switch Type(ent.InventoryType) {
 		case TypeValueEquip:
 			ep := equipable.ByInventoryProvider(l, db, tenant)(ent.ID)
-			return model.Map(model.Fold(ep, NewEquipableModel, EquipableFolder(ent.ID, ent.Capacity)), foldProperty(ref.SetEquipable))()
+			return model.Map(model.Fold(ep, NewEquipableModel(ent.ID, ent.Capacity), EquipableFolder), foldProperty(ref.SetEquipable))()
 		case TypeValueUse:
-			setter = ref.SetUseable
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
-			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
+			return model.Map(model.Fold(ip, NewItemModel(ent.ID, ent.Capacity), ItemFolder), foldProperty(ref.SetUseable))()
 		case TypeValueSetup:
-			setter = ref.SetSetup
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
-			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
+			return model.Map(model.Fold(ip, NewItemModel(ent.ID, ent.Capacity), ItemFolder), foldProperty(ref.SetSetup))()
 		case TypeValueETC:
-			setter = ref.SetEtc
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
-			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
+			return model.Map(model.Fold(ip, NewItemModel(ent.ID, ent.Capacity), ItemFolder), foldProperty(ref.SetEtc))()
 		case TypeValueCash:
-			setter = ref.SetCash
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
-			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
+			return model.Map(model.Fold(ip, NewItemModel(ent.ID, ent.Capacity), ItemFolder), foldProperty(ref.SetCash))()
 		}
 		return ref, errors.New("unknown inventory type")
 	}
