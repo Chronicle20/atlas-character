@@ -66,10 +66,16 @@ func foldInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(
 			return model.Map(model.Fold(ep, NewEquipableModel, EquipableFolder(ent.ID, ent.Capacity)), foldProperty(ref.SetEquipable))()
 		case TypeValueUse:
 			setter = ref.SetUseable
+			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
+			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
 		case TypeValueSetup:
 			setter = ref.SetSetup
+			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
+			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
 		case TypeValueETC:
 			setter = ref.SetEtc
+			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
+			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
 		case TypeValueCash:
 			setter = ref.SetCash
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
