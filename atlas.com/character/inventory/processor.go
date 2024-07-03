@@ -14,6 +14,8 @@ import (
 	"math"
 )
 
+type ItemProvider[M any] func(inventoryId uint32) model.SliceProvider[M]
+
 func byCharacterIdProvider(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32) model.Provider[Model] {
 	return func(characterId uint32) model.Provider[Model] {
 		return model.Fold[entity, Model](getByCharacter(tenant.Id(), characterId)(db), supplier, foldInventory(l, db, tenant))
@@ -30,44 +32,48 @@ func supplier() (Model, error) {
 	}, nil
 }
 
+func EquipableFolder(inventoryId uint32, capacity uint32) model.Folder[equipable.Model, EquipableModel] {
+	return func(m EquipableModel, em equipable.Model) (EquipableModel, error) {
+		m.id = inventoryId
+		m.capacity = capacity
+		m.items = append(m.items, em)
+		return m, nil
+	}
+}
+
+func foldProperty[M any, N any](setter func(sm N) M) model.Transformer[N, M] {
+	return func(n N) (M, error) {
+		return setter(n), nil
+	}
+}
+
+func ItemFolder(inventoryId uint32, capacity uint32) model.Folder[item.Model, ItemModel] {
+	return func(m ItemModel, em item.Model) (ItemModel, error) {
+		m.id = inventoryId
+		m.capacity = capacity
+		m.items = append(m.items, em)
+		return m, nil
+	}
+}
+
 func foldInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(ref Model, ent entity) (Model, error) {
 	return func(ref Model, ent entity) (Model, error) {
+		var setter func(ItemModel) Model
+
 		switch Type(ent.InventoryType) {
 		case TypeValueEquip:
-			equipables, err := equipable.GetInInventory(l, db, tenant)(ent.ID)
-			if err != nil {
-				return ref, err
-			}
-			ref.equipable = ref.Equipable().SetItems(equipables).SetId(ent.ID).SetCapacity(ent.Capacity)
-			return ref, nil
+			ep := equipable.ByInventoryProvider(l, db, tenant)(ent.ID)
+			return model.Map(model.Fold(ep, NewEquipableModel, EquipableFolder(ent.ID, ent.Capacity)), foldProperty(ref.SetEquipable))()
 		case TypeValueUse:
-			items, err := item.GetByInventory(l, db, tenant)(ent.ID)
-			if err != nil {
-				return ref, err
-			}
-			ref.useable = ref.Useable().SetItems(items).SetId(ent.ID).SetCapacity(ent.Capacity)
-			return ref, nil
+			setter = ref.SetUseable
 		case TypeValueSetup:
-			items, err := item.GetByInventory(l, db, tenant)(ent.ID)
-			if err != nil {
-				return ref, err
-			}
-			ref.setup = ref.Setup().SetItems(items).SetId(ent.ID).SetCapacity(ent.Capacity)
-			return ref, nil
+			setter = ref.SetSetup
 		case TypeValueETC:
-			items, err := item.GetByInventory(l, db, tenant)(ent.ID)
-			if err != nil {
-				return ref, err
-			}
-			ref.etc = ref.ETC().SetItems(items).SetId(ent.ID).SetCapacity(ent.Capacity)
-			return ref, nil
+			setter = ref.SetEtc
 		case TypeValueCash:
-			items, err := item.GetByInventory(l, db, tenant)(ent.ID)
-			if err != nil {
-				return ref, err
-			}
-			ref.cash = ref.Cash().SetItems(items).SetId(ent.ID).SetCapacity(ent.Capacity)
-			return ref, nil
+			setter = ref.SetCash
+			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
+			return model.Map(model.Fold(ip, NewItemModel, ItemFolder(ent.ID, ent.Capacity)), foldProperty(setter))()
 		}
 		return ref, errors.New("unknown inventory type")
 	}
@@ -208,21 +214,18 @@ func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant
 			}
 
 			if inventoryType == TypeValueEquip {
-				// Create Equipment
 				events, err = createEquipable(l, tx, span, tenant)(characterId, inv.Id(), inventoryType, itemId)
 				if err != nil {
 					l.WithError(err).Errorf("Unable to create [%d] equipable [%d] for character [%d].", quantity, itemId, characterId)
 					return err
 				}
 			} else {
-				// Create Item
 				events, err = createItem(l, tx, span, tenant)(characterId, inv.Id(), inventoryType, itemId, quantity)
 				if err != nil {
 					l.WithError(err).Errorf("Unable to create [%d] items [%d] for character [%d].", quantity, itemId, characterId)
 					return err
 				}
 			}
-
 			return nil
 		})
 		if err != nil {

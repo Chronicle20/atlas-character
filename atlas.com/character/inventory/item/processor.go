@@ -67,9 +67,15 @@ func invalidCharacterCreationItem(itemId uint32) bool {
 //	}
 //}
 
-func GetByInventory(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(inventoryId uint32) ([]Model, error) {
+func ByInventoryProvider(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(inventoryId uint32) model.SliceProvider[Model] {
+	return func(inventoryId uint32) model.SliceProvider[Model] {
+		return database.ModelSliceProvider[Model, entity](db)(getByInventory(tenant.Id(), inventoryId), makeModel)
+	}
+}
+
+func GetByInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(inventoryId uint32) ([]Model, error) {
 	return func(inventoryId uint32) ([]Model, error) {
-		return database.ModelSliceProvider[Model, entity](db)(getByInventory(tenant.Id(), inventoryId), makeModel)()
+		return ByInventoryProvider(l, db, tenant)(inventoryId)()
 	}
 }
 
