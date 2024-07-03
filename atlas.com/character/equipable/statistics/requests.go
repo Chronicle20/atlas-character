@@ -1,8 +1,8 @@
 package statistics
 
 import (
-	"atlas-character/rest/requests"
 	"fmt"
+	"github.com/Chronicle20/atlas-rest/requests"
 	"os"
 )
 

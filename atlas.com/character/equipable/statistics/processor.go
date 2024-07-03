@@ -1,16 +1,16 @@
 package statistics
 
 import (
-	"atlas-character/rest/requests"
 	"atlas-character/tenant"
 	"github.com/Chronicle20/atlas-model/model"
+	"github.com/Chronicle20/atlas-rest/requests"
 	"github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 )
 
 func Create(l logrus.FieldLogger, span opentracing.Span, tenant tenant.Model) func(itemId uint32) (uint32, error) {
 	return func(itemId uint32) (uint32, error) {
-		ro, err := requestCreate(itemId)(l, span, tenant)
+		ro, err := requestCreate(itemId)(l)
 		if err != nil {
 			l.WithError(err).Errorf("Generating equipment item %d, they were not awarded this item. Check request in ESO service.", itemId)
 			return 0, err
@@ -21,7 +21,7 @@ func Create(l logrus.FieldLogger, span opentracing.Span, tenant tenant.Model) fu
 
 func byEquipmentIdModelProvider(l logrus.FieldLogger, span opentracing.Span, tenant tenant.Model) func(equipmentId uint32) model.Provider[Model] {
 	return func(equipmentId uint32) model.Provider[Model] {
-		return requests.Provider[RestModel, Model](l, span, tenant)(requestById(equipmentId), makeEquipment)
+		return requests.Provider[RestModel, Model](l)(requestById(equipmentId), makeEquipment)
 	}
 }
 
