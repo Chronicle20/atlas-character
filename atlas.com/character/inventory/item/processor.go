@@ -2,11 +2,12 @@ package item
 
 import (
 	"atlas-character/database"
+	"atlas-character/slottable"
 	"atlas-character/tenant"
+	"github.com/Chronicle20/atlas-model/model"
 	"github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"sort"
 )
 
 var characterCreationItems = []uint32{
@@ -119,6 +120,7 @@ func UpdateQuantity(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func
 }
 
 func MaxInSlot() uint32 {
+	//TODO make this more sophisticated
 	return 200
 }
 
@@ -139,21 +141,26 @@ func GetEquipmentSlotDestination(l logrus.FieldLogger, span opentracing.Span, te
 	}
 }
 
-func GetNextFreeSlot(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(inventoryId uint32) (int16, error) {
-	return func(inventoryId uint32) (int16, error) {
-		es, err := GetByInventory(l, db, tenant)(inventoryId)
+func CreateItem(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
+	return func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
+		ms, err := GetByInventory(l, db, tenant)(inventoryId)
 		if err != nil {
-			return 1, err
+			return model.ErrorProvider[slottable.Slottable](err)
 		}
-		if len(es) == 0 {
-			return 1, nil
+		slot, err := slottable.GetNextFreeSlot(model.SliceMap(model.FixedSliceProvider(ms), slottableTransformer))
+		if err != nil {
+			return model.ErrorProvider[slottable.Slottable](err)
 		}
-
-		sort.Slice(es, func(i, j int) bool {
-			return es[i].Slot() < es[j].Slot()
-		})
-		return minFreeSlot(es), nil
+		i, err := createItem(db, tenant, inventoryId, itemId, quantity, slot)
+		if err != nil {
+			return model.ErrorProvider[slottable.Slottable](err)
+		}
+		return model.FixedProvider[slottable.Slottable](i)
 	}
+}
+
+func slottableTransformer(m Model) (slottable.Slottable, error) {
+	return m, nil
 }
 
 func RemoveItem(_ logrus.FieldLogger, db *gorm.DB) func(characterId uint32, id uint32) error {

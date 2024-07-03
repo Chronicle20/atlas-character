@@ -2,8 +2,10 @@ package equipable
 
 import (
 	"atlas-character/database"
+	"atlas-character/slottable"
 	"atlas-character/tenant"
 	"github.com/Chronicle20/atlas-model/model"
+	"github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -38,4 +40,10 @@ func FilterOutInventory(e Model) bool {
 
 func FilterOutEquipment(e Model) bool {
 	return e.Slot() > 0
+}
+
+func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, t tenant.Model) func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
+	return func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
+		return model.FixedProvider[slottable.Slottable](Model{})
+	}
 }
