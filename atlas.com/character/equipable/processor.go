@@ -42,8 +42,24 @@ func FilterOutEquipment(e Model) bool {
 	return e.Slot() > 0
 }
 
-func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, t tenant.Model) func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
+func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
 	return func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable] {
-		return model.FixedProvider[slottable.Slottable](Model{})
+		ms, err := GetByInventory(l, db, tenant)(inventoryId)
+		if err != nil {
+			return model.ErrorProvider[slottable.Slottable](err)
+		}
+		slot, err := slottable.GetNextFreeSlot(model.SliceMap(model.FixedSliceProvider(ms), slottableTransformer))
+		if err != nil {
+			return model.ErrorProvider[slottable.Slottable](err)
+		}
+		i, err := createItem(db, tenant, inventoryId, itemId, slot)
+		if err != nil {
+			return model.ErrorProvider[slottable.Slottable](err)
+		}
+		return model.FixedProvider[slottable.Slottable](i)
 	}
+}
+
+func slottableTransformer(m Model) (slottable.Slottable, error) {
+	return m, nil
 }
