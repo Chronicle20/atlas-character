@@ -24,7 +24,7 @@ func byIdProvider(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(c
 
 func GetById(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32, decorators ...model.Decorator[Model]) (Model, error) {
 	return func(characterId uint32, decorators ...model.Decorator[Model]) (Model, error) {
-		return model.ApplyDecorators(byIdProvider(l, db, tenant)(characterId), decorators...)()
+		return model.Map(byIdProvider(l, db, tenant)(characterId), model.Decorate(decorators...))()
 	}
 }
 
@@ -36,7 +36,7 @@ func byAccountInWorldProvider(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.M
 
 func GetForAccountInWorld(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(accountId uint32, worldId byte, decorators ...model.Decorator[Model]) ([]Model, error) {
 	return func(accountId uint32, worldId byte, decorators ...model.Decorator[Model]) ([]Model, error) {
-		return model.ApplyDecoratorsSlice(byAccountInWorldProvider(l, db, tenant)(accountId, worldId), decorators...)()
+		return model.SliceMap(byAccountInWorldProvider(l, db, tenant)(accountId, worldId), model.Decorate(decorators...))()
 	}
 }
 
@@ -48,7 +48,7 @@ func byMapInWorld(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(w
 
 func GetForMapInWorld(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(worldId byte, mapId uint32, decorators ...model.Decorator[Model]) ([]Model, error) {
 	return func(worldId byte, mapId uint32, decorators ...model.Decorator[Model]) ([]Model, error) {
-		return model.ApplyDecoratorsSlice(byMapInWorld(l, db, tenant)(worldId, mapId), decorators...)()
+		return model.SliceMap(byMapInWorld(l, db, tenant)(worldId, mapId), model.Decorate(decorators...))()
 	}
 }
 
@@ -60,7 +60,7 @@ func byName(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(name st
 
 func GetForName(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(name string, decorators ...model.Decorator[Model]) ([]Model, error) {
 	return func(name string, decorators ...model.Decorator[Model]) ([]Model, error) {
-		return model.ApplyDecoratorsSlice(byName(l, db, tenant)(name), decorators...)()
+		return model.SliceMap(byName(l, db, tenant)(name), model.Decorate(decorators...))()
 	}
 }
 
