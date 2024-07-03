@@ -194,8 +194,13 @@ func (i adjustment) OldSlot() int16 {
 
 func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32, inventoryType Type, itemId uint32, quantity uint32) error {
 	return func(characterId uint32, inventoryType Type, itemId uint32, quantity uint32) error {
-		var events = make([]adjustment, 0)
+		expectedInventoryType := math.Floor(float64(itemId) / 1000000)
+		if expectedInventoryType != float64(inventoryType) {
+			l.Errorf("Provided inventoryType [%d] does not match expected one [%d] for itemId [%d].", inventoryType, uint32(expectedInventoryType), itemId)
+			return errors.New("invalid inventory type")
+		}
 
+		var events = make([]adjustment, 0)
 		err := db.Transaction(func(tx *gorm.DB) error {
 			m, err := GetInventories(l, tx, tenant)(characterId)
 			if err != nil {
