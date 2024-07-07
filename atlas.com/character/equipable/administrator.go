@@ -5,7 +5,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func createItem(db *gorm.DB, t tenant.Model, inventoryId uint32, itemId uint32, slot int16) (Model, error) {
+func createItem(db *gorm.DB, t tenant.Model, inventoryId uint32, itemId uint32, slot int16, referenceId uint32) (Model, error) {
 	var im Model
 	txError := db.Transaction(func(tx *gorm.DB) error {
 		eii := &entity{
@@ -13,6 +13,7 @@ func createItem(db *gorm.DB, t tenant.Model, inventoryId uint32, itemId uint32, 
 			InventoryId: inventoryId,
 			ItemId:      itemId,
 			Slot:        slot,
+			ReferenceId: referenceId,
 		}
 		err := db.Create(eii).Error
 		if err != nil {

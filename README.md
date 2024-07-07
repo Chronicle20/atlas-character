@@ -14,6 +14,7 @@ A RESTful resource which provides character services.
 - DB_HOST - Postgres Database host
 - DB_PORT - Postgres Database port
 - DB_NAME - Postgres Database name
+- EQUIPABLE_SERVICE_URL - [scheme]://[host]:[port]/api/ess/
 
 ## API
 

@@ -56,11 +56,11 @@ func Transform(m Model) (RestModel, error) {
 	return rm, nil
 }
 
-func Extract(model RestModel) (Model, error) {
+func Extract(m RestModel) (Model, error) {
 	return Model{
-		id:            model.Id,
-		itemId:        model.ItemId,
-		slot:          model.Slot,
+		id:            m.Id,
+		itemId:        m.ItemId,
+		slot:          m.Slot,
 		strength:      0,
 		dexterity:     0,
 		intelligence:  0,

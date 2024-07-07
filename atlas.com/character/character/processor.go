@@ -64,14 +64,14 @@ func GetForName(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(nam
 	}
 }
 
-func InventoryModelDecorator(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) model.Decorator[Model] {
+func InventoryModelDecorator(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) model.Decorator[Model] {
 	return func(m Model) Model {
-		i, err := inventory.GetInventories(l, db, tenant)(m.Id())
+		i, err := inventory.GetInventories(l, db, span, tenant)(m.Id())
 		if err != nil {
 			return m
 		}
 
-		es, err := equipable.GetEquipment(l, db, tenant)(i.Equipable().Id())
+		es, err := equipable.GetEquipment(l, db, span, tenant)(i.Equipable().Id())
 		if err != nil {
 			return m
 		}
@@ -130,7 +130,7 @@ func Create(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant ten
 				return err
 			}
 
-			inv, err := inventory.Create(l, tx, tenant)(res.id, 24)
+			inv, err := inventory.Create(l, tx, span, tenant)(res.id, 24)
 			if err != nil {
 				l.WithError(err).Errorf("Unable to create inventory for character during character creation.")
 				tx.Rollback()

@@ -16,9 +16,9 @@ import (
 
 type ItemProvider[M any] func(inventoryId uint32) model.SliceProvider[M]
 
-func byCharacterIdProvider(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32) model.Provider[Model] {
+func byCharacterIdProvider(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32) model.Provider[Model] {
 	return func(characterId uint32) model.Provider[Model] {
-		return model.Fold[entity, Model](getByCharacter(tenant.Id(), characterId)(db), supplier, foldInventory(l, db, tenant))
+		return model.Fold[entity, Model](getByCharacter(tenant.Id(), characterId)(db), supplier, foldInventory(l, db, span, tenant))
 	}
 }
 
@@ -51,11 +51,11 @@ func ItemFolder(m ItemModel, em item.Model) (ItemModel, error) {
 	return m, nil
 }
 
-func foldInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(ref Model, ent entity) (Model, error) {
+func foldInventory(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(ref Model, ent entity) (Model, error) {
 	return func(ref Model, ent entity) (Model, error) {
 		switch Type(ent.InventoryType) {
 		case TypeValueEquip:
-			ep := equipable.ByInventoryProvider(l, db, tenant)(ent.ID)
+			ep := equipable.ByInventoryProvider(l, db, span, tenant)(ent.ID)
 			return model.Map(model.Fold(ep, NewEquipableModel(ent.ID, ent.Capacity), EquipableFolder), foldProperty(ref.SetEquipable))()
 		case TypeValueUse:
 			ip := item.ByInventoryProvider(l, db, tenant)(ent.ID)
@@ -74,9 +74,9 @@ func foldInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(
 	}
 }
 
-func GetInventories(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32) (Model, error) {
+func GetInventories(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32) (Model, error) {
 	return func(characterId uint32) (Model, error) {
-		return byCharacterIdProvider(l, db, tenant)(characterId)()
+		return byCharacterIdProvider(l, db, span, tenant)(characterId)()
 	}
 }
 
@@ -138,7 +138,7 @@ func FilterItemId(l logrus.FieldLogger, db *gorm.DB, _ opentracing.Span, tenant 
 	}
 }
 
-func Create(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32, defaultCapacity uint32) (Model, error) {
+func Create(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32, defaultCapacity uint32) (Model, error) {
 	return func(characterId uint32, defaultCapacity uint32) (Model, error) {
 		err := db.Transaction(func(tx *gorm.DB) error {
 			for _, t := range Types {
@@ -155,7 +155,7 @@ func Create(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(charact
 			return Model{}, err
 		}
 
-		return GetInventories(l, db, tenant)(characterId)
+		return GetInventories(l, db, span, tenant)(characterId)
 	}
 }
 
@@ -202,7 +202,7 @@ func CreateItem(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant
 
 		var events = make([]adjustment, 0)
 		err := db.Transaction(func(tx *gorm.DB) error {
-			m, err := GetInventories(l, tx, tenant)(characterId)
+			m, err := GetInventories(l, tx, span, tenant)(characterId)
 			if err != nil {
 				l.WithError(err).Errorf("Unable to locate inventories for character [%d].", characterId)
 				return err
