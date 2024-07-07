@@ -32,6 +32,15 @@ func (r RestModel) GetID() string {
 	return strconv.Itoa(int(r.Id))
 }
 
+func (r *RestModel) SetID(strId string) error {
+	id, err := strconv.Atoi(strId)
+	if err != nil {
+		return err
+	}
+	r.Id = uint32(id)
+	return nil
+}
+
 func Transform(m Model) (RestModel, error) {
 	rm := RestModel{
 		ItemId:        m.itemId,

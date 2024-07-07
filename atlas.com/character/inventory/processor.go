@@ -3,6 +3,7 @@ package inventory
 import (
 	"atlas-character/database"
 	"atlas-character/equipable"
+	"atlas-character/equipment/slot/information"
 	"atlas-character/inventory/item"
 	"atlas-character/slottable"
 	"atlas-character/tenant"
@@ -18,7 +19,7 @@ type ItemProvider[M any] func(inventoryId uint32) model.SliceProvider[M]
 
 func byCharacterIdProvider(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32) model.Provider[Model] {
 	return func(characterId uint32) model.Provider[Model] {
-		return model.Fold[entity, Model](getByCharacter(tenant.Id(), characterId)(db), supplier, foldInventory(l, db, span, tenant))
+		return model.Fold[entity, Model](getByCharacter(tenant.Id, characterId)(db), supplier, foldInventory(l, db, span, tenant))
 	}
 }
 
@@ -92,7 +93,7 @@ func GetInventory(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(c
 
 func GetInventoryByTypeVal(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32, inventoryType Type, filters ...ItemFilter) (Model, error) {
 	return func(characterId uint32, inventoryType Type, filters ...ItemFilter) (Model, error) {
-		inv, err := database.ModelProvider[Model, entity](db)(get(tenant.Id(), characterId, inventoryType), makeInventory)()
+		inv, err := database.ModelProvider[Model, entity](db)(get(tenant.Id, characterId, inventoryType), makeInventory)()
 		if err != nil {
 			return Model{}, err
 		}
@@ -142,7 +143,7 @@ func Create(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant ten
 	return func(characterId uint32, defaultCapacity uint32) (Model, error) {
 		err := db.Transaction(func(tx *gorm.DB) error {
 			for _, t := range Types {
-				_, err := create(db, tenant.Id(), characterId, int8(t), defaultCapacity)
+				_, err := create(db, tenant.Id, characterId, int8(t), defaultCapacity)
 				if err != nil {
 					l.WithError(err).Errorf("Unable to create inventory [%d] for character [%d].", t, characterId)
 					return err
@@ -309,3 +310,103 @@ func createNewItem(l logrus.FieldLogger) func(creator itemCreator, characterId u
 }
 
 type itemCreator func(characterId uint32, inventoryId uint32, inventoryType int8, itemId uint32, quantity uint32) model.Provider[slottable.Slottable]
+
+func EquipItemForCharacter(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32, source int16, destination int16) {
+	return func(characterId uint32, source int16, destination int16) {
+		l.Debugf("Received request to equip item at [%d] for character [%d]. Ideally placing in [%d]", source, characterId, destination)
+		e, err := equipable.GetBySlot(l, db, tenant)(characterId, source)
+		if err != nil {
+			l.WithError(err).Errorf("Unable to retrieve equipment in slot [%d].", source)
+			return
+		}
+
+		l.Debugf("Equipment [%d] is item [%d] for character [%d].", e.Id(), e.ItemId(), characterId)
+
+		slots, err := information.GetById(l, span, tenant)(e.ItemId())
+		if err != nil {
+			l.WithError(err).Errorf("Unable to retrieve destination slots for item [%d].", e.ItemId())
+			return
+		} else if len(slots) <= 0 {
+			l.Errorf("Unable to retrieve destination slots for item [%d].", e.ItemId())
+			return
+		}
+		slot := slots[0]
+		l.Debugf("Equipment [%d] to be equipped in slot [%d] for character [%d].", e.Id(), slot.Slot(), characterId)
+
+		temporarySlot := int16(math.MinInt16)
+
+		existingSlot := e.Slot()
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if equip, err := equipable.GetBySlot(l, tx, tenant)(characterId, slot.Slot()); err == nil && equip.Id() != 0 {
+				l.Debugf("Equipment [%d] already exists in slot [%d], that item will be moved temporarily to [%d] for character [%d].", equip.Id(), slot.Slot(), temporarySlot, characterId)
+				_ = equipable.UpdateSlot(l, tx, tenant)(equip.Id(), temporarySlot)
+			}
+
+			err = equipable.UpdateSlot(l, tx, tenant)(e.Id(), slot.Slot())
+			if err != nil {
+				return err
+			}
+			l.Debugf("Moved item [%d] from slot [%d] to [%d] for character [%d].", e.ItemId(), existingSlot, slot.Slot(), characterId)
+
+			if equip, err := equipable.GetBySlot(l, tx, tenant)(characterId, temporarySlot); err == nil && equip.Id() != 0 {
+				err := equipable.UpdateSlot(l, tx, tenant)(equip.Id(), existingSlot)
+				if err != nil {
+					return err
+				}
+				l.Debugf("Moved item from temporary location [%d] to slot [%d] for character [%d].", temporarySlot, existingSlot, characterId)
+			}
+			return nil
+		})
+		if err != nil {
+			l.WithError(err).Errorf("Unable to complete the equipment of item [%d] for character [%d].", e.Id(), characterId)
+			return
+		}
+
+		//emitItemEquipped(l, span)(characterId)
+		//emitInventoryModificationEvent(l, span)(characterId, true, 2, e.ItemId(), TypeValueEquip, 1, slot, existingSlot)
+	}
+}
+
+func UnequipItemForCharacter(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant tenant.Model) func(characterId uint32, oldSlot int16) {
+	return func(characterId uint32, oldSlot int16) {
+		l.Debugf("Received request to unequip item at [%d] for character [%d].", oldSlot, characterId)
+
+		txErr := db.Transaction(func(tx *gorm.DB) error {
+			e, err := equipable.GetBySlot(l, tx, tenant)(characterId, oldSlot)
+			if err != nil {
+				l.WithError(err).Errorf("Unable to retrieve equipment in slot [%d].", oldSlot)
+				return err
+			}
+
+			ci, err := GetInventories(l, tx, span, tenant)(characterId)
+			if err != nil {
+				l.WithError(err).Errorf("Unable to locate inventories for character [%d].", characterId)
+				return err
+			}
+			inv, err := ci.GetHolderByType(TypeValueEquip)
+			if err != nil {
+				l.WithError(err).Errorf("Unable to locate inventory [%d] for character [%d].", TypeValueEquip, characterId)
+				return err
+			}
+			newSlot, err := equipable.GetNextFreeSlot(l, db, span, tenant)(inv.Id())()
+			if err != nil {
+				l.WithError(err).Errorf("Unable to get next free equipment slot")
+				return err
+			}
+
+			err = equipable.UpdateSlot(l, tx, tenant)(e.Id(), newSlot)
+			if err != nil {
+				return err
+			}
+
+			l.Debugf("Unequipped %d for character %d and place it in slot [%d], from [%d].", e.Id(), characterId, newSlot, oldSlot)
+			return nil
+		})
+		if txErr != nil {
+			l.WithError(txErr).Errorf("Unable to complete unequiping item at [%d] for character [%d].", oldSlot, characterId)
+			return
+		}
+		//emitItemUnequipped(l, span)(characterId)
+		//emitInventoryModificationEvent(l, span)(characterId, true, 2, itemId, TypeValueEquip, 1, newSlot, oldSlot)
+	}
+}

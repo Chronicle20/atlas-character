@@ -18,7 +18,7 @@ var invalidLevelErr = errors.New("invalid level")
 
 func byIdProvider(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(characterId uint32) model.Provider[Model] {
 	return func(characterId uint32) model.Provider[Model] {
-		return database.ModelProvider[Model, entity](db)(getById(tenant.Id(), characterId), makeCharacter)
+		return database.ModelProvider[Model, entity](db)(getById(tenant.Id, characterId), makeCharacter)
 	}
 }
 
@@ -30,7 +30,7 @@ func GetById(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(charac
 
 func byAccountInWorldProvider(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(accountId uint32, worldId byte) model.SliceProvider[Model] {
 	return func(accountId uint32, worldId byte) model.SliceProvider[Model] {
-		return database.ModelSliceProvider[Model, entity](db)(getForAccountInWorld(tenant.Id(), accountId, worldId), makeCharacter)
+		return database.ModelSliceProvider[Model, entity](db)(getForAccountInWorld(tenant.Id, accountId, worldId), makeCharacter)
 	}
 }
 
@@ -42,7 +42,7 @@ func GetForAccountInWorld(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model
 
 func byMapInWorld(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(worldId byte, mapId uint32) model.SliceProvider[Model] {
 	return func(worldId byte, mapId uint32) model.SliceProvider[Model] {
-		return database.ModelSliceProvider[Model, entity](db)(getForMapInWorld(tenant.Id(), worldId, mapId), makeCharacter)
+		return database.ModelSliceProvider[Model, entity](db)(getForMapInWorld(tenant.Id, worldId, mapId), makeCharacter)
 	}
 }
 
@@ -54,7 +54,7 @@ func GetForMapInWorld(l logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) fu
 
 func byName(_ logrus.FieldLogger, db *gorm.DB, tenant tenant.Model) func(name string) model.SliceProvider[Model] {
 	return func(name string) model.SliceProvider[Model] {
-		return database.ModelSliceProvider[Model, entity](db)(getForName(tenant.Id(), name), makeCharacter)
+		return database.ModelSliceProvider[Model, entity](db)(getForName(tenant.Id, name), makeCharacter)
 	}
 }
 
@@ -123,7 +123,7 @@ func Create(l logrus.FieldLogger, db *gorm.DB, span opentracing.Span, tenant ten
 
 		var res Model
 		err = db.Transaction(func(tx *gorm.DB) error {
-			res, err = create(tx, tenant.Id(), input.accountId, input.worldId, input.name, input.level, input.strength, input.dexterity, input.intelligence, input.luck, input.maxHp, input.maxMp, input.jobId, input.gender, input.hair, input.face, input.skinColor, input.mapId)
+			res, err = create(tx, tenant.Id, input.accountId, input.worldId, input.name, input.level, input.strength, input.dexterity, input.intelligence, input.luck, input.maxHp, input.maxMp, input.jobId, input.gender, input.hair, input.face, input.skinColor, input.mapId)
 			if err != nil {
 				l.WithError(err).Errorf("Error persisting character in database.")
 				tx.Rollback()
